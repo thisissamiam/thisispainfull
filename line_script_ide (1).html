@@ -12,18 +12,18 @@
     padding: 20px;
   }
 
-  textarea {
+  textarea, input {
     width: 100%;
-    height: 150px;
+    padding: 10px;
+    margin-top: 10px;
     background: #222;
     color: #0f0;
     border: 1px solid #444;
-    padding: 10px;
     font-family: monospace;
   }
 
   button {
-    padding: 10px 20px;
+    padding: 10px 15px;
     margin-top: 10px;
     cursor: pointer;
   }
@@ -34,14 +34,13 @@
     padding: 10px;
     height: 200px;
     overflow-y: auto;
-    font-family: monospace;
     border: 1px solid #444;
     white-space: pre-wrap;
+    font-family: monospace;
   }
 
   #status {
     margin-top: 10px;
-    font-size: 14px;
     color: #aaa;
   }
 </style>
@@ -51,104 +50,102 @@
 
 <h2>Compiler</h2>
 
+<input id="apiKey" placeholder="Enter your API key">
+<br>
+<button onclick="saveKey()">Save Key</button>
+
 <textarea id="codeInput" placeholder="Enter code..."></textarea>
 <br>
 <button onclick="runCode()">Run</button>
 
-<div id="status">Loading...</div>
+<div id="status">Ready</div>
 <div id="output"></div>
 
-<script type="module">
-import { pipeline } from "https://cdn.jsdelivr.net/npm/@xenova/transformers";
+<script>
+const API_URL = "https://www.aichixia.xyz/api/v1/chat/completions";
 
 const outputDiv = document.getElementById("output");
 const statusDiv = document.getElementById("status");
 const inputBox = document.getElementById("codeInput");
-
-let translator;
+const apiKeyInput = document.getElementById("apiKey");
 
 function log(text) {
   outputDiv.textContent += text + "\n";
 }
 
-// Load a smaller, faster model
-async function loadModel() {
-  statusDiv.textContent = "Loading model...";
+// Load saved key
+window.onload = () => {
+  const saved = localStorage.getItem("apiKey");
+  if (saved) apiKeyInput.value = saved;
+};
 
-  translator = await pipeline(
-    "text2text-generation",
-    "Xenova/flan-t5-small"
-  );
-
-  statusDiv.textContent = "Ready";
+function saveKey() {
+  localStorage.setItem("apiKey", apiKeyInput.value);
+  alert("API key saved locally");
 }
 
-// Clean AI output so only valid JS remains
-function extractJS(text) {
-  // Remove markdown fences if any
-  text = text.replace(/```[a-z]*|```/gi, "");
+async function translate(code) {
+  const API_KEY = localStorage.getItem("apiKey");
 
-  // Try to isolate code by common JS keywords
-  const start = text.search(/(let|const|var|function|console\.log)/);
-  if (start !== -1) {
-    text = text.slice(start);
+  if (!API_KEY) {
+    throw new Error("No API key provided");
   }
 
-  // Stop at likely explanation text
-  text = text.split("\n\n")[0];
-  text = text.split("Explanation")[0];
-  text = text.split("Here is")[0];
-
-  return text.trim();
-}
-
-// Translate input → JS
-async function translate(code) {
   const prompt = `
 Convert this into JavaScript ONLY.
 
 Rules:
 - Output only valid JavaScript
 - No explanations
+- No markdown
 - No extra text
 
 Input:
 ${code}
 `;
 
-  const result = await translator(prompt, {
-    max_new_tokens: 80,
+  const res = await fetch(API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${API_KEY}`
+    },
+    body: JSON.stringify({
+      model: "gpt-5-mini",
+      messages: [
+        { role: "user", content: prompt }
+      ]
+    })
   });
 
-  let text = result[0].generated_text;
+  const data = await res.json();
 
-  return extractJS(text);
+  return data.choices?.[0]?.message?.content || "";
 }
 
-// Run compiler
+// Clean output
+function extractJS(text) {
+  text = text.replace(/```[a-z]*|```/gi, "");
+  const start = text.search(/(let|const|var|function|console\.log)/);
+  if (start !== -1) text = text.slice(start);
+  return text.trim();
+}
+
 window.runCode = async function () {
   outputDiv.textContent = "";
 
-  const code = inputBox.value;
-
-  if (!translator) {
-    log("Still loading...");
-    return;
-  }
-
-  statusDiv.textContent = "Translating...";
-
   try {
-    const jsCode = await translate(code);
+    statusDiv.textContent = "Translating...";
+
+    const code = inputBox.value;
+    let jsCode = await translate(code);
+    jsCode = extractJS(jsCode);
 
     log("Generated JS:\n" + jsCode + "\n");
     log("Running...\n");
 
     const originalLog = console.log;
-
-    console.log = (...args) => {
-      log(args.join(" "));
-    };
+    console.log = (...args) => log(args.join(" "));
 
     eval(jsCode);
 
@@ -156,12 +153,10 @@ window.runCode = async function () {
 
     statusDiv.textContent = "Done";
   } catch (err) {
-    log("Error: " + err);
+    log("Error: " + err.message);
     statusDiv.textContent = "Error";
   }
 };
-
-loadModel();
 </script>
 
 </body>
