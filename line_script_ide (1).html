@@ -2,162 +2,116 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Compiler</title>
-
+<title><<<>><><<<>>> IDE</title>
 <style>
-  body {
-    font-family: Arial, sans-serif;
-    background: #111;
-    color: #eee;
-    padding: 20px;
-  }
-
-  textarea, input {
-    width: 100%;
-    padding: 10px;
-    margin-top: 10px;
-    background: #222;
-    color: #0f0;
-    border: 1px solid #444;
-    font-family: monospace;
-  }
-
-  button {
-    padding: 10px 15px;
-    margin-top: 10px;
-    cursor: pointer;
-  }
-
-  #output {
-    margin-top: 20px;
-    background: #000;
-    padding: 10px;
-    height: 200px;
-    overflow-y: auto;
-    border: 1px solid #444;
-    white-space: pre-wrap;
-    font-family: monospace;
-  }
-
-  #status {
-    margin-top: 10px;
-    color: #aaa;
-  }
+body{
+margin:0;
+background:#0f0f0f;
+color:#e0e0e0;
+font-family:monospace;
+overflow:hidden;
+}
+#topbar{
+height:40px;
+background:#111;
+display:flex;
+align-items:center;
+padding:0 10px;
+gap:10px;
+}
+button{
+background:#222;
+color:#eee;
+border:none;
+padding:6px 10px;
+cursor:pointer;
+}
+button:hover{background:#333;}
+#layout{
+display:flex;
+height:calc(100vh - 40px);
+}
+#editor{
+width:50%;
+height:100%;
+background:#0a0a0a;
+color:#00ffcc;
+border:none;
+outline:none;
+padding:10px;
+resize:none;
+font-size:14px;
+}
+#output{
+width:50%;
+height:100%;
+border:none;
+background:#ffffff;
+}
+#status{
+position:absolute;
+bottom:5px;
+left:10px;
+font-size:10px;
+opacity:0.5;
+}
 </style>
 </head>
-
 <body>
-
-<h2>Compiler</h2>
-
-<input id="apiKey" placeholder="Enter your API key">
-<br>
-<button onclick="saveKey()">Save Key</button>
-
-<textarea id="codeInput" placeholder="Enter code..."></textarea>
-<br>
-<button onclick="runCode()">Run</button>
-
-<div id="status">Ready</div>
-<div id="output"></div>
-
+<div id="topbar">
+<button onclick="runCode()">><>< Run</button>
+<button onclick="clearAll()"><< Clear</button>
+<button onclick="beauty()">><>< Format</button>
+</div>
+<div id="layout">
+<textarea id="editor" spellcheck="false">>>>. >>>.. >>>...</textarea>
+<iframe id="output"></iframe>
+</div>
+<div id="status"><<<>>< status: ready ></div>
 <script>
-const API_URL = "https://www.aichixia.xyz/api/v1/chat/completions";
+function runCode(){
+  const code = document.getElementById('editor').value.trim();
+  const tokens = code.split(/\s+/);
 
-const outputDiv = document.getElementById("output");
-const statusDiv = document.getElementById("status");
-const inputBox = document.getElementById("codeInput");
-const apiKeyInput = document.getElementById("apiKey");
+  let output = "";
 
-function log(text) {
-  outputDiv.textContent += text + "\n";
-}
+  tokens.forEach(token => {
+    let count = (token.match(/>/g) || []).length;
+    let dots = (token.match(/\./g) || []).length;
 
-// Load saved key
-window.onload = () => {
-  const saved = localStorage.getItem("apiKey");
-  if (saved) apiKeyInput.value = saved;
-};
-
-function saveKey() {
-  localStorage.setItem("apiKey", apiKeyInput.value);
-  alert("API key saved locally");
-}
-
-async function translate(code) {
-  const API_KEY = localStorage.getItem("apiKey");
-
-  if (!API_KEY) {
-    throw new Error("No API key provided");
-  }
-
-  const prompt = `
-Convert this into JavaScript ONLY.
-
-Rules:
-- Output only valid JavaScript
-- No explanations
-- No markdown
-- No extra text
-
-Input:
-${code}
-`;
-
-  const res = await fetch(API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${API_KEY}`
-    },
-    body: JSON.stringify({
-      model: "gpt-5-mini",
-      messages: [
-        { role: "user", content: prompt }
-      ]
-    })
+    if (dots === 1){ // lowercase letter
+      if (count === 0) { output += " "; return; }
+      let charCode = ((count - 1) % 26) + 97;
+      output += String.fromCharCode(charCode);
+    }
+    else if (dots === 2){ // uppercase
+      if (count === 0) { output += " "; return; }
+      let charCode = ((count - 1) % 26) + 65;
+      output += String.fromCharCode(charCode);
+    }
+    else if (dots === 3){ // number
+      let digit = count % 10;
+      output += digit.toString();
+    }
   });
 
-  const data = await res.json();
-
-  return data.choices?.[0]?.message?.content || "";
+  document.getElementById('output').srcdoc = "<pre>" + output + "</pre>";
+  document.getElementById('status').innerText = '<<<> executed >>';
 }
 
-// Clean output
-function extractJS(text) {
-  text = text.replace(/```[a-z]*|```/gi, "");
-  const start = text.search(/(let|const|var|function|console\.log)/);
-  if (start !== -1) text = text.slice(start);
-  return text.trim();
+function clearAll(){
+  document.getElementById('editor').value = '';
+  document.getElementById('output').srcdoc = '';
+  document.getElementById('status').innerText = '<< cleared >>';
 }
 
-window.runCode = async function () {
-  outputDiv.textContent = "";
-
-  try {
-    statusDiv.textContent = "Translating...";
-
-    const code = inputBox.value;
-    let jsCode = await translate(code);
-    jsCode = extractJS(jsCode);
-
-    log("Generated JS:\n" + jsCode + "\n");
-    log("Running...\n");
-
-    const originalLog = console.log;
-    console.log = (...args) => log(args.join(" "));
-
-    eval(jsCode);
-
-    console.log = originalLog;
-
-    statusDiv.textContent = "Done";
-  } catch (err) {
-    log("Error: " + err.message);
-    statusDiv.textContent = "Error";
-  }
-};
+function beauty(){
+  let t = document.getElementById('editor');
+  let lines = t.value.split('\n');
+  let spaced = lines.map(l => l.trim()).join('\n');
+  t.value = spaced;
+  document.getElementById('status').innerText = '<< formatted >>';
+}
 </script>
-
 </body>
 </html>
