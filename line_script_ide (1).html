@@ -1,177 +1,136 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>LineScript IDE</title>
-  <style>
-    body {
-      margin: 0;
-      font-family: monospace;
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-      background: #1e1e1e;
-      color: #fff;
-    }
+<meta charset="UTF-8">
+<title>AI Compiler (Local)</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    background: #111;
+    color: #eee;
+    padding: 20px;
+  }
 
-    header {
-      background: #111;
-      padding: 10px;
-      display: flex;
-      gap: 10px;
-      align-items: center;
-    }
+  textarea {
+    width: 100%;
+    height: 150px;
+    background: #222;
+    color: #0f0;
+    border: 1px solid #444;
+    padding: 10px;
+    font-family: monospace;
+  }
 
-    button {
-      padding: 8px 12px;
-      cursor: pointer;
-      border: none;
-      background: #333;
-      color: white;
-      border-radius: 4px;
-    }
+  button {
+    padding: 10px 20px;
+    margin-top: 10px;
+    cursor: pointer;
+  }
 
-    .container {
-      display: flex;
-      flex: 1;
-      overflow: hidden;
-    }
-
-    .editor-wrapper {
-      display: flex;
-      width: 50%;
-      border-right: 1px solid #333;
-    }
-
-    .line-numbers {
-      background: #2a2a2a;
-      padding: 10px 5px;
-      text-align: right;
-      color: #888;
-      user-select: none;
-    }
-
-    textarea {
-      width: 100%;
-      height: 100%;
-      padding: 10px;
-      border: none;
-      outline: none;
-      resize: none;
-      background: #1e1e1e;
-      color: #fff;
-      font-size: 14px;
-      line-height: 1.5;
-      overflow: auto;
-    }
-
-    .output {
-      width: 50%;
-      padding: 10px;
-      overflow-y: auto;
-      white-space: pre-wrap;
-      background: #000;
-      color: #0f0;
-    }
-  </style>
+  #output {
+    margin-top: 20px;
+    background: #000;
+    padding: 10px;
+    height: 200px;
+    overflow-y: auto;
+    font-family: monospace;
+    border: 1px solid #444;
+    white-space: pre-wrap;
+  }
+</style>
 </head>
 <body>
-  <header>
-    <button onclick="runCode()">Run</button>
-    <button onclick="clearOutput()">Clear Output</button>
-  </header>
 
-  <div class="container">
-    <div class="editor-wrapper">
-      <div id="lineNumbers" class="line-numbers"></div>
-      <textarea id="code" oninput="updateLineNumbers()" onscroll="syncScroll()" placeholder="Write your LineScript code here..."></textarea>
-    </div>
-    <div class="output" id="output"></div>
-  </div>
+<h2>AI Local Compiler (Custom → JavaScript)</h2>
 
-  <script>
-    const lines = [];
-    const vars = {};
+<textarea id="codeInput" placeholder="Enter your custom code here..."></textarea>
+<br>
+<button onclick="runCode()">Run</button>
 
-    const codeArea = document.getElementById("code");
-    const lineNumbers = document.getElementById("lineNumbers");
+<div id="output"></div>
 
-    function updateLineNumbers() {
-      const count = codeArea.value.split("\n").length;
-      let nums = "";
-      for (let i = 1; i <= count; i++) {
-        nums += i + "\n";
-      }
-      lineNumbers.textContent = nums;
-    }
+<script type="module">
+import { pipeline } from "https://cdn.jsdelivr.net/npm/@xenova/transformers";
 
-    function syncScroll() {
-      lineNumbers.scrollTop = codeArea.scrollTop;
-    }
+const outputDiv = document.getElementById("output");
+const inputBox = document.getElementById("codeInput");
 
-    function log(msg) {
-      const output = document.getElementById("output");
-      output.textContent += msg + "\n";
-    }
+let translator;
 
-    function runLine(line) {
-      const parts = line.trim().split(" ");
-      if (!parts[0]) return;
-      const cmd = parts[0];
+// Load AI model
+async function loadModel() {
+  log("Loading AI model... (first time may take a while)\n");
 
-      try {
-        if (cmd === "addline") {
-          lines.push(parts.slice(1).join(" "));
-        } else if (cmd === "editline") {
-          const i = parseInt(parts[1]);
-          lines[i] = parts.slice(2).join(" ");
-        } else if (cmd === "delline") {
-          const i = parseInt(parts[1]);
-          lines.splice(i, 1);
-        } else if (cmd === "clearlines") {
-          lines.length = 0;
-        } else if (cmd === "set") {
-          vars[parts[1]] = parseFloat(parts[2]);
-        } else if (cmd === "add") {
-          vars[parts[1]] += parseFloat(parts[2]);
-        } else if (cmd === "sub") {
-          vars[parts[1]] -= parseFloat(parts[2]);
-        } else if (cmd === "multi") {
-          vars[parts[1]] *= parseFloat(parts[2]);
-        } else if (cmd === "div") {
-          vars[parts[1]] /= parseFloat(parts[2]);
-        } else if (cmd === "print") {
-          log(vars[parts[1]]);
-        }
-      } catch (e) {
-        log("Error: " + line);
-      }
-    }
+  translator = await pipeline(
+    "text-generation",
+    "Xenova/distilgpt2"
+  );
 
-    function runCode() {
-      document.getElementById("output").textContent = "";
-      lines.length = 0;
+  log("Model loaded!\n");
+}
 
-      const program = codeArea.value.split("\n");
+function log(text) {
+  outputDiv.textContent += text + "\n";
+}
 
-      program.forEach(line => runLine(line));
+// Translate custom code → JS
+async function translate(code) {
+  const prompt = `
+Convert the following custom language into JavaScript.
 
-      log("\n--- FINAL STATE ---");
-      log("Lines:");
-      lines.forEach((l, i) => log(i + ": " + l));
+Rules:
+- Output ONLY JavaScript
+- No explanations
+- Use console.log for output
 
-      log("\nVariables:");
-      for (let v in vars) {
-        log(v + " = " + vars[v]);
-      }
-    }
+Code:
+${code}
+`;
 
-    function clearOutput() {
-      document.getElementById("output").textContent = "";
-    }
+  const result = await translator(prompt, {
+    max_new_tokens: 150
+  });
 
-    updateLineNumbers();
-  </script>
+  return result[0].generated_text;
+}
+
+// Run compiler
+window.runCode = async function () {
+  outputDiv.textContent = "";
+
+  const code = inputBox.value;
+
+  if (!translator) {
+    log("AI not loaded yet...");
+    return;
+  }
+
+  log("Translating...\n");
+
+  const jsCode = await translate(code);
+
+  log("Generated JS:\n");
+  log(jsCode);
+  log("\nRunning...\n");
+
+  try {
+    const originalLog = console.log;
+
+    console.log = (...args) => {
+      log(args.join(" "));
+    };
+
+    eval(jsCode);
+
+    console.log = originalLog;
+  } catch (err) {
+    log("Error: " + err);
+  }
+};
+
+// Start loading immediately
+loadModel();
+</script>
+
 </body>
 </html>
