@@ -64,7 +64,7 @@ opacity:0.5;
 </div>
 <div id="layout">
 <textarea id="editor" spellcheck="false">
->>>>[ >>>. ]
+>>[>>.]
 </textarea>
 <iframe id="output"></iframe>
 </div>
@@ -86,9 +86,30 @@ function decodeToken(token){
   return "";
 }
 
+// Tokenizer: splits symbols including brackets properly
+function tokenize(code){
+  let tokens = [];
+  let current = "";
+
+  for(let char of code){
+    if(char === ' ' || char === '\n'){
+      if(current) tokens.push(current);
+      current = "";
+    } else if(char === '[' || char === ']'){
+      if(current) tokens.push(current);
+      tokens.push(char);
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  if(current) tokens.push(current);
+  return tokens;
+}
+
 function runCode(){
-  const code = document.getElementById('editor').value.trim();
-  const tokens = code.split(/\s+/);
+  const code = document.getElementById('editor').value;
+  const tokens = tokenize(code);
 
   let output = "";
 
@@ -96,16 +117,15 @@ function runCode(){
     for(let i = start; i < end; i++){
       let token = tokens[i];
 
-      // Loop start >>>>[ 
-      let loopMatch = token.match(/^(>+)\[$/);
-      if(loopMatch){
-        let count = loopMatch[1].length;
+      // Loop start like >>>>[ 
+      if(/^(>+)\[$/.test(token)){
+        let count = token.match(/>/g).length;
 
         // find matching ]
         let depth = 1;
         let j = i + 1;
         while(j < end && depth > 0){
-          if(tokens[j] && tokens[j].endsWith('[')) depth++;
+          if(tokens[j] === '[') depth++;
           if(tokens[j] === ']') depth--;
           j++;
         }
@@ -121,10 +141,8 @@ function runCode(){
         continue;
       }
 
-      // ignore loop closing token
       if(token === ']') continue;
 
-      // output tokens
       if(/^[>.]+$/.test(token)){
         output += decodeToken(token);
       }
@@ -142,3 +160,6 @@ function clearAll(){
   document.getElementById('output').srcdoc = '';
   document.getElementById('status').innerText = '<< cleared >>';
 }
+</script>
+</body>
+</html>
