@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>AI Compiler (Local)</title>
+<title>Compiler</title>
 <style>
   body {
     font-family: Arial, sans-serif;
@@ -37,51 +37,58 @@
     border: 1px solid #444;
     white-space: pre-wrap;
   }
+
+  #status {
+    margin-top: 10px;
+    font-size: 14px;
+    color: #aaa;
+  }
 </style>
 </head>
 <body>
 
-<h2>AI Local Compiler (Custom → JavaScript)</h2>
+<h2>Compiler</h2>
 
-<textarea id="codeInput" placeholder="Enter your custom code here..."></textarea>
+<textarea id="codeInput" placeholder="Enter code..."></textarea>
 <br>
 <button onclick="runCode()">Run</button>
 
+<div id="status">Initializing...</div>
 <div id="output"></div>
 
 <script type="module">
 import { pipeline } from "https://cdn.jsdelivr.net/npm/@xenova/transformers";
 
 const outputDiv = document.getElementById("output");
+const statusDiv = document.getElementById("status");
 const inputBox = document.getElementById("codeInput");
 
 let translator;
 
-// Load AI model
+function log(text) {
+  outputDiv.textContent += text + "\n";
+}
+
+// Load model silently
 async function loadModel() {
-  log("Loading AI model... (first time may take a while)\n");
+  statusDiv.textContent = "Initializing...";
 
   translator = await pipeline(
     "text-generation",
     "Xenova/distilgpt2"
   );
 
-  log("Model loaded!\n");
+  statusDiv.textContent = "Ready";
 }
 
-function log(text) {
-  outputDiv.textContent += text + "\n";
-}
-
-// Translate custom code → JS
+// Convert input → JavaScript
 async function translate(code) {
   const prompt = `
-Convert the following custom language into JavaScript.
+Convert the following code into JavaScript.
 
 Rules:
 - Output ONLY JavaScript
 - No explanations
-- Use console.log for output
 
 Code:
 ${code}
@@ -101,17 +108,13 @@ window.runCode = async function () {
   const code = inputBox.value;
 
   if (!translator) {
-    log("AI not loaded yet...");
+    log("Not ready yet...");
     return;
   }
 
-  log("Translating...\n");
+  statusDiv.textContent = "Running...";
 
   const jsCode = await translate(code);
-
-  log("Generated JS:\n");
-  log(jsCode);
-  log("\nRunning...\n");
 
   try {
     const originalLog = console.log;
@@ -123,12 +126,13 @@ window.runCode = async function () {
     eval(jsCode);
 
     console.log = originalLog;
+    statusDiv.textContent = "Done";
   } catch (err) {
     log("Error: " + err);
+    statusDiv.textContent = "Error";
   }
 };
 
-// Start loading immediately
 loadModel();
 </script>
 
