@@ -21,41 +21,22 @@ button:hover{background:#333;}
 </div>
 <div id="layout">
 <textarea id="editor" spellcheck="false">
->>[>>.] ^>....
+>>-=>. >>->[>.]
 </textarea>
 <iframe id="output"></iframe>
 </div>
 <div id="status"><<<>>< status: ready ></div>
 <script>
-const punctuationGrid = [
-  ['!','@','#','$','%','^','&','*','(',')'],
-  ['-','_','=','+','[',']','{','}','\\','|'],
-  [';',':','\'','"',',','.','<','>','/','?']
-];
+let vars = new Array(100).fill("");
+let currentVar = 0;
 
 function decodeToken(token){
   let count = (token.match(/>/g) || []).length;
   let dots = (token.match(/\./g) || []).length;
 
-  // punctuation using ^ for row
-  if(dots === 4){
-    let row = (token.match(/\^/g) || []).length;
-    let col = count;
-    row = (row - 1) % punctuationGrid.length;
-    col = (col - 1) % punctuationGrid[0].length;
-    return punctuationGrid[row][col] || '';
-  }
-
-  if(dots === 1){
-    return String.fromCharCode(((count - 1) % 26) + 97);
-  }
-  if(dots === 2){
-    return String.fromCharCode(((count - 1) % 26) + 65);
-  }
-  if(dots === 3){
-    if(count === 0) return ' ';
-    return (count % 10).toString();
-  }
+  if(dots === 1) return String.fromCharCode(((count - 1) % 26) + 97);
+  if(dots === 2) return String.fromCharCode(((count - 1) % 26) + 65);
+  if(dots === 3) return count === 0 ? ' ' : (count % 10).toString();
   return "";
 }
 
@@ -89,6 +70,29 @@ function runCode(){
     for(let i = start; i < end; i++){
       let token = tokens[i];
 
+      // VARIABLE SELECT >>>-
+      if(/^(>+)-$/.test(token)){
+        currentVar = token.match(/>/g).length;
+        continue;
+      }
+
+      // ASSIGN >>>-=
+      if(/^(>+)-=$/.test(token)){
+        currentVar = token.match(/>/g).length;
+        let valueToken = tokens[i+1];
+        vars[currentVar] = decodeToken(valueToken);
+        i++;
+        continue;
+      }
+
+      // PRINT VARIABLE >>>->
+      if(/^(>+)->$/.test(token)){
+        let v = token.match(/>/g).length;
+        output += vars[v] || "";
+        continue;
+      }
+
+      // LOOP >>>>[
       if(/^(>+)$/.test(token) && tokens[i+1] === '['){
         let count = token.length;
 
@@ -113,142 +117,8 @@ function runCode(){
 
       if(token === '[' || token === ']') continue;
 
-      if(/^[>.^]+$/.test(token)){
-        output += decodeToken(token);
-      }
-    }
-  }
-
-  execute(0, tokens.length);
-
-  document.getElementById('output').srcdoc = "<pre>" + output + "</pre>";
-  document.getElementById('status').innerText = '<<<> executed >>';
-}
-
-function clearAll(){
-  document.getElementById('editor').value = '';
-  document.getElementById('output').srcdoc = '';
-  document.getElementById('status').innerText = '<< cleared >>';
-}
-</script>
-</body>
-</html>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title><<<>><><<<>>> IDE</title>
-<style>
-body{margin:0;background:#0f0f0f;color:#e0e0e0;font-family:monospace;overflow:hidden;}
-#topbar{height:40px;background:#111;display:flex;align-items:center;padding:0 10px;gap:10px;}
-button{background:#222;color:#eee;border:none;padding:6px 10px;cursor:pointer;}
-button:hover{background:#333;}
-#layout{display:flex;height:calc(100vh - 40px);}
-#editor{width:50%;height:100%;background:#0a0a0a;color:#00ffcc;border:none;outline:none;padding:10px;resize:none;font-size:14px;}
-#output{width:50%;height:100%;border:none;background:#ffffff;}
-#status{position:absolute;bottom:5px;left:10px;font-size:10px;opacity:0.5;}
-</style>
-</head>
-<body>
-<div id="topbar">
-<button onclick="runCode()">><>< Run</button>
-<button onclick="clearAll()"><< Clear</button>
-</div>
-<div id="layout">
-<textarea id="editor" spellcheck="false">
->>[>>.] ^>....
-</textarea>
-<iframe id="output"></iframe>
-</div>
-<div id="status"><<<>>< status: ready ></div>
-<script>
-const punctuationGrid = [
-  ['!','@','#','$','%','^','&','*','(',')'],
-  ['-','_','=','+','[',']','{','}','\\','|'],
-  [';',':','\'','"',',','.','<','>','/','?']
-];
-
-function decodeToken(token){
-  let count = (token.match(/>/g) || []).length;
-  let dots = (token.match(/\./g) || []).length;
-
-  // punctuation using ^ for row
-  if(dots === 4){
-    let row = (token.match(/\^/g) || []).length;
-    let col = count;
-    row = (row - 1) % punctuationGrid.length;
-    col = (col - 1) % punctuationGrid[0].length;
-    return punctuationGrid[row][col] || '';
-  }
-
-  if(dots === 1){
-    return String.fromCharCode(((count - 1) % 26) + 97);
-  }
-  if(dots === 2){
-    return String.fromCharCode(((count - 1) % 26) + 65);
-  }
-  if(dots === 3){
-    if(count === 0) return ' ';
-    return (count % 10).toString();
-  }
-  return "";
-}
-
-function tokenize(code){
-  let tokens = [];
-  let current = "";
-
-  for(let char of code){
-    if(char === ' ' || char === '\n'){
-      if(current) tokens.push(current);
-      current = "";
-    } else if(char === '[' || char === ']'){
-      if(current) tokens.push(current);
-      tokens.push(char);
-      current = "";
-    } else {
-      current += char;
-    }
-  }
-  if(current) tokens.push(current);
-  return tokens;
-}
-
-function runCode(){
-  const code = document.getElementById('editor').value;
-  const tokens = tokenize(code);
-
-  let output = "";
-
-  function execute(start, end){
-    for(let i = start; i < end; i++){
-      let token = tokens[i];
-
-      if(/^(>+)$/.test(token) && tokens[i+1] === '['){
-        let count = token.length;
-
-        let depth = 1;
-        let j = i + 2;
-        while(j < end && depth > 0){
-          if(tokens[j] === '[') depth++;
-          if(tokens[j] === ']') depth--;
-          j++;
-        }
-
-        let loopStart = i + 2;
-        let loopEnd = j - 1;
-
-        for(let r = 0; r < count; r++){
-          execute(loopStart, loopEnd);
-        }
-
-        i = loopEnd;
-        continue;
-      }
-
-      if(token === '[' || token === ']') continue;
-
-      if(/^[>.^]+$/.test(token)){
+      // DIRECT OUTPUT
+      if(/^[>.]+$/.test(token)){
         output += decodeToken(token);
       }
     }
