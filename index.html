@@ -1,168 +1,284 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Mini IDE</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title><<<>><><<<>>> IDE</title>
+
 <style>
-  body {
-    margin: 0;
-    font-family: monospace;
-    background: #1e1e1e;
-    color: #ddd;
-  }
-
-  .container {
-    display: flex;
-    height: 100vh;
-  }
-
-  textarea {
-    width: 50%;
-    height: 100%;
-    background: #1e1e1e;
-    color: transparent;
-    caret-color: white;
-    border: none;
-    outline: none;
-    padding: 10px;
-    resize: none;
-    position: absolute;
-    z-index: 2;
-  }
-
-  .editor-wrapper {
-    width: 50%;
-    position: relative;
-  }
-
-  .highlight {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    padding: 10px;
-    white-space: pre-wrap;
-    pointer-events: none;
-    z-index: 1;
-  }
-
-  .error-line {
-    background: rgba(255, 0, 0, 0.25);
-  }
-
-  .keyword { color: #4fc1ff; }
-  .arrow { color: #c586c0; }
-  .number { color: #b5cea8; }
-  .invalid { color: #f44747; }
-
-  .output {
-    width: 50%;
-    padding: 10px;
-    background: #252526;
-    overflow-y: auto;
-  }
-
-  .error {
-    color: #f44747;
-  }
-</style>
-</head>
-<body>
-
-<div class="container">
-  <div class="editor-wrapper">
-    <textarea id="editor" spellcheck="false"></textarea>
-    <pre id="highlight" class="highlight"></pre>
-  </div>
-  <div class="output">
-    <div id="output"></div>
-  </div>
-</div>
-
-<script>
-const editor = document.getElementById("editor");
-const highlight = document.getElementById("highlight");
-const output = document.getElementById("output");
-
-let variables = {};
-
-function tokenize(line) {
-  return line.trim().split(/\s+/);
+body{
+  margin:0;
+  background:#0f0f0f;
+  color:#e0e0e0;
+  font-family:monospace;
 }
 
-function syntaxHighlight(code, errorLines) {
-  const lines = code.split("\n");
-  return lines.map((line, i) => {
-    let html = line;
+#topbar{
+  height:40px;
+  background:#111;
+  display:flex;
+  align-items:center;
+  padding:0 10px;
+  gap:10px;
+}
 
-    html = html.replace(/(>-=?|>->|>>>\.\.\.)/g, '<span class="keyword">$1</span>');
-    html = html.replace(/(>->)/g, '<span class="arrow">$1</span>');
+button{
+  background:#222;
+  color:#eee;
+  border:none;
+  padding:6px 10px;
+  cursor:pointer;
+}
+button:hover{background:#333;}
 
-    if (errorLines.includes(i)) {
-      return `<div class="error-line">${html}</div>`;
+#layout{
+  display:flex;
+  height:calc(100vh - 40px);
+}
+
+#editor{
+  width:50%;
+  height:100%;
+  background:#0a0a0a;
+  color:#00ffcc;
+  border:none;
+  outline:none;
+  padding:10px;
+  resize:none;
+  font-size:14px;
+}
+
+#output{
+  width:50%;
+  height:100%;
+  border:none;
+  background:#ffffff;
+}
+
+#error{
+  position:absolute;
+  bottom:20px;
+  left:10px;
+  color:#ff5555;
+  font-size:12px;
+}
+
+#status{
+  position:absolute;
+  bottom:5px;
+  left:10px;
+  font-size:10px;
+  opacity:0.5;
+}
+
+/* Syntax highlighting overlay */
+.editor-wrapper{
+  position:relative;
+  width:50%;
+}
+
+.highlight{
+  position:absolute;
+  top:0;
+  left:0;
+  right:0;
+  bottom:0;
+  padding:10px;
+  white-space:pre-wrap;
+  pointer-events:none;
+  z-index:1;
+  color:#ddd;
+}
+
+textarea{
+  position:absolute;
+  top:0;
+  left:0;
+  right:0;
+  bottom:0;
+  width:100%;
+  height:100%;
+  background:transparent;
+  color:transparent;
+  caret-color:white;
+  border:none;
+  outline:none;
+  padding:10px;
+  resize:none;
+  z-index:2;
+}
+
+.keyword{ color:#4fc1ff; }
+.arrow{ color:#c586c0; }
+.number{ color:#b5cea8; }
+.error-line{ background:rgba(255,0,0,0.25); }
+</style>
+</head>
+
+<body>
+
+<div id="topbar">
+<button onclick="runCode()">><>< Run</button>
+<button onclick="clearAll()"><< Clear</button>
+</div>
+
+<div id="layout">
+  <div class="editor-wrapper">
+    <pre id="highlight" class="highlight"></pre>
+    <textarea id="editor" spellcheck="false">>-= >>>... >-></textarea>
+  </div>
+  <iframe id="output"></iframe>
+</div>
+
+<div id="error"></div>
+<div id="status"><<<>>< status: ready ></div>
+
+<script>
+let vars = new Array(100).fill("");
+
+function decodeToken(token){
+  let count = (token.match(/>/g) || []).length;
+  let dots = (token.match(/\./g) || []).length;
+
+  if(dots === 1) return String.fromCharCode(((count - 1) % 26) + 97);
+  if(dots === 2) return String.fromCharCode(((count - 1) % 26) + 65);
+  if(dots === 3) return count === 0 ? ' ' : (count % 10).toString();
+  return null;
+}
+
+function tokenize(code){
+  let tokens = [];
+  let current = "";
+
+  for(let char of code){
+    if(char === ' ' || char === '\n'){
+      if(current) tokens.push(current);
+      current = "";
+    } else if(char === '[' || char === ']'){
+      if(current) tokens.push(current);
+      tokens.push(char);
+      current = "";
+    } else {
+      current += char;
     }
+  }
+  if(current) tokens.push(current);
+  return tokens;
+}
 
+function runCode(){
+  document.getElementById('error').innerText = "";
+  vars.fill("");
+
+  const code = document.getElementById('editor').value;
+  const tokens = tokenize(code);
+
+  let output = "";
+
+  function error(msg, token){
+    document.getElementById('error').innerText = "Error: " + msg + " near '" + token + "'";
+    throw new Error(msg);
+  }
+
+  function execute(start, end){
+    for(let i = start; i < end; i++){
+      let token = tokens[i];
+
+      // ASSIGN
+      if(/^(>+)-=$/.test(token)){
+        let v = token.match(/>/g).length;
+        let valueToken = tokens[i+1];
+        if(!valueToken) error("Missing value after assignment", token);
+
+        let val = decodeToken(valueToken);
+        if(val === null) error("Invalid value token", valueToken);
+
+        vars[v] = val;
+        i++;
+        continue;
+      }
+
+      // PRINT VAR
+      if(/^(>+)->$/.test(token)){
+        let v = token.match(/>/g).length;
+        output += vars[v] || "";
+        continue;
+      }
+
+      // LOOP
+      if(/^(>+)$/.test(token) && tokens[i+1] === '['){
+        let count = token.length;
+
+        let depth = 1;
+        let j = i + 2;
+        while(j < tokens.length && depth > 0){
+          if(tokens[j] === '[') depth++;
+          if(tokens[j] === ']') depth--;
+          j++;
+        }
+
+        if(depth !== 0) error("Unclosed loop", token);
+
+        let loopStart = i + 2;
+        let loopEnd = j - 1;
+
+        for(let r = 0; r < count; r++){
+          execute(loopStart, loopEnd);
+        }
+
+        i = loopEnd;
+        continue;
+      }
+
+      // DIRECT OUTPUT
+      if(/^[>.]+$/.test(token)){
+        let val = decodeToken(token);
+        if(val === null) error("Invalid output token", token);
+        output += val;
+        continue;
+      }
+
+      error("Unknown token", token);
+    }
+  }
+
+  try{
+    execute(0, tokens.length);
+    document.getElementById('output').srcdoc = "<pre>" + output + "</pre>";
+    document.getElementById('status').innerText = '<<<> executed >>';
+  } catch(e){}
+}
+
+function highlightCode(code){
+  return code.split("\n").map(line => {
+    let html = line;
+    html = html.replace(/(>-=|>->|>>>)\.?\.?\.?/g, '<span class="keyword">$&</span>');
+    html = html.replace(/(\[|\])/g, '<span class="arrow">$&</span>');
     return `<div>${html}</div>`;
   }).join("\n");
 }
 
-function run(code) {
-  const lines = code.split("\n");
-  let errorLines = [];
-  let out = "";
-
-  lines.forEach((line, i) => {
-    const tokens = tokenize(line);
-
-    if (tokens.length === 0) return;
-
-    const token = tokens[0];
-
-    // assignment
-    if (/^>+-$/.test(token)) {
-      const varName = "var" + Object.keys(variables).length;
-      variables[varName] = 3;
-      return;
-    }
-
-    // print
-    if (token === ">->") {
-      const keys = Object.keys(variables);
-      if (keys.length > 0) {
-        out += variables[keys[keys.length - 1]] + "\n";
-      } else {
-        out += "undefined\n";
-      }
-      return;
-    }
-
-    // literal print
-    if (token.startsWith(">>>")) {
-      const val = token.replace(/>/g, "").replace(/\./g, "");
-      out += val.length + "\n";
-      return;
-    }
-
-    errorLines.push(i);
-  });
-
-  if (out === "") {
-    out = "Error: No output produced";
-  }
-
-  output.innerHTML = out.split("\n").map(l => `<div>${l}</div>`).join("");
-  highlight.innerHTML = syntaxHighlight(code, errorLines);
+function updateHighlight(){
+  const code = document.getElementById('editor').value;
+  document.getElementById('highlight').innerHTML = highlightCode(code);
 }
 
+function clearAll(){
+  document.getElementById('editor').value = '';
+  document.getElementById('output').srcdoc = '';
+  document.getElementById('error').innerText = '';
+  document.getElementById('status').innerText = '<< cleared >>';
+}
+
+const editor = document.getElementById('editor');
 editor.addEventListener("input", () => {
-  run(editor.value);
+  updateHighlight();
+  runCode();
 });
 
-// initial
-editor.value = ">-= >>>... >->";
-run(editor.value);
+// init
+updateHighlight();
+runCode();
 </script>
 
 </body>
