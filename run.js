@@ -5,8 +5,7 @@ function runCode(){
   
   try{
     const result = interpret(code, startTime, maxExecutionTime);
-    const elapsed = (performance.now() - startTime).toFixed(2);
-    document.getElementById("output").textContent = result + `\n\n[${elapsed}ms]`;
+    document.getElementById("output").textContent = result;
   } catch(e){
     console.error("Run error:", e);
     document.getElementById("output").textContent = "Error: " + e.message;
