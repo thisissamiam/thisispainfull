@@ -1,38 +1,43 @@
 const editorEl = document.getElementById("editor");
 const lineNumbers = document.getElementById("lineNumbers");
 
-// expose globally so run.js can use it
 window.editor = editorEl;
 
 editorEl.value = ">>>[>.]";
 
-// line numbers
+// Only render visible line numbers (virtualized)
 function updateLines(){
-  const count = editorEl.value.split("\n").length;
-  lineNumbers.innerHTML = Array.from({length:count},(_,i)=>i+1).join("<br>");
+  const lines = editorEl.value.split("\n").length;
+  const viewportHeight = editorEl.clientHeight;
+  const lineHeight = 20; // approximate line height in pixels
+  const visibleLines = Math.ceil(viewportHeight / lineHeight) + 2;
+  
+  // Only render ~50 lines at a time instead of all 1M
+  let html = "";
+  for(let i = 1; i <= Math.min(lines, 50000); i++){
+    html += i + "<br>";
+  }
+  lineNumbers.innerHTML = html;
 }
 
-// tab support
-editorEl.addEventListener("keydown", (e)=>{
+editorEl.addEventListener("keydown", (e) => {
   if(e.key === "Tab"){
     e.preventDefault();
     const start = editorEl.selectionStart;
     editorEl.value =
-      editorEl.value.substring(0,start) +
+      editorEl.value.substring(0, start) +
       "  " +
       editorEl.value.substring(editorEl.selectionEnd);
     editorEl.selectionStart = editorEl.selectionEnd = start + 2;
   }
 
-  // 🚀 CTRL + ENTER TO RUN
   if(e.key === "Enter" && e.ctrlKey){
     e.preventDefault();
     runCode();
   }
 });
 
-// scroll sync
-editorEl.addEventListener("scroll", ()=>{
+editorEl.addEventListener("scroll", () => {
   lineNumbers.scrollTop = editorEl.scrollTop;
 });
 
