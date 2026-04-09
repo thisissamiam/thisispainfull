@@ -2,16 +2,62 @@
 <html>
 <head>
 <meta charset="UTF-8" />
-<title>Custom Language IDE (Smart Errors)</title>
+<title>Custom IDE</title>
+
 <style>
-body{margin:0;font-family:monospace;background:#1e1e1e;color:#ccc;display:flex;flex-direction:column;height:100vh}
-#topbar{height:40px;background:#2d2d2d;display:flex;align-items:center;padding:0 10px}
-button{background:#3a3a3a;border:none;color:#fff;padding:6px 12px;cursor:pointer}
-#main{display:flex;flex:1}
-#editor{width:65%}
-#right{width:35%;display:flex;flex-direction:column;background:#1b1b1b}
-#outputHeader{padding:8px;background:#2d2d2d}
-#output{flex:1;padding:10px;color:#00ff88;white-space:pre-wrap}
+body {
+  margin:0;
+  font-family:monospace;
+  background:#1e1e1e;
+  color:#ccc;
+  display:flex;
+  flex-direction:column;
+  height:100vh;
+}
+
+#topbar {
+  height:40px;
+  background:#2d2d2d;
+  display:flex;
+  align-items:center;
+  padding:0 10px;
+}
+
+button {
+  background:#3a3a3a;
+  border:none;
+  color:white;
+  padding:6px 12px;
+  cursor:pointer;
+}
+
+#main {
+  display:flex;
+  flex:1;
+}
+
+#editor {
+  width:65%;
+}
+
+#right {
+  width:35%;
+  display:flex;
+  flex-direction:column;
+  background:#1b1b1b;
+}
+
+#outputHeader {
+  padding:8px;
+  background:#2d2d2d;
+}
+
+#output {
+  flex:1;
+  padding:10px;
+  color:#00ff88;
+  white-space:pre-wrap;
+}
 </style>
 </head>
 <body>
@@ -33,16 +79,47 @@ button{background:#3a3a3a;border:none;color:#fff;padding:6px 12px;cursor:pointer
 
 <script>
 let editor;
+
 require.config({ paths: { vs: 'https://unpkg.com/monaco-editor@0.44.0/min/vs' } });
 require(['vs/editor/editor.main'], function () {
+
+  // 🎨 CUSTOM LANGUAGE COLORING
+  monaco.languages.register({ id: "customLang" });
+
+  monaco.languages.setMonarchTokensProvider("customLang", {
+    tokenizer: {
+      root: [
+        [/>+\\[|\\]/, "loop"],
+        [/>+-=>/, "assign"],
+        [/>+->/, "var"],
+        [/>+\\.+/, "print"],
+      ]
+    }
+  });
+
+  monaco.editor.defineTheme("customTheme", {
+    base: "vs-dark",
+    inherit: true,
+    rules: [
+      { token: "loop", foreground: "C586C0" },
+      { token: "assign", foreground: "4FC1FF" },
+      { token: "var", foreground: "FFD700" },
+      { token: "print", foreground: "B5CEA8" }
+    ]
+  });
+
   editor = monaco.editor.create(document.getElementById('editor'), {
     value: ">>>[>.]",
-    language: 'plaintext',
-    theme: 'vs-dark',
+    language: "customLang",
+    theme: "customTheme",
     automaticLayout: true,
     minimap: { enabled: false }
   });
+
+  // 🔄 LIVE ERROR CHECK
+  editor.onDidChangeModelContent(() => validate());
 });
+
 
 // ===== GRAMMAR =====
 const grammar = {
@@ -76,60 +153,87 @@ const grammar = {
 
     {"name":"value","symbols":["dots"],"postprocess":d=>d[0]}
   ],
-  ParserStart: "main"
+  ParserStart:"main"
 };
+
 
 // ===== EXECUTION =====
 function execute(ast, vars, out){
   for(const node of ast){
-    if(node.type==='print'){
-      if(node.dots===1) out.value += String.fromCharCode(96+node.arrows);
-      else if(node.dots===2) out.value += String.fromCharCode(64+node.arrows);
-      else if(node.dots===3) out.value += String(node.arrows);
-      else if(node.dots===4) out.value += "@";
-      else out.value += "?";
+    if(node.type==="print"){
+      if(node.dots===1) out.value+=String.fromCharCode(96+node.arrows);
+      else if(node.dots===2) out.value+=String.fromCharCode(64+node.arrows);
+      else if(node.dots===3) out.value+=String(node.arrows);
+      else out.value+="?";
     }
-    else if(node.type==='assign') vars[node.varIndex]=node.value;
-    else if(node.type==='varPrint') out.value += (vars[node.varIndex]||0);
-    else if(node.type==='loop'){
+    else if(node.type==="assign") vars[node.varIndex]=node.value;
+    else if(node.type==="varPrint") out.value+=(vars[node.varIndex]||0);
+    else if(node.type==="loop"){
       for(let i=0;i<node.count;i++) execute(node.body,vars,out);
     }
   }
 }
 
-// ===== SMART ERROR SYSTEM =====
-function getSmartError(e, code){
-  let msg = e.message;
 
-  if(code.trim().startsWith("."))
-    return "Code must start with '>' → Try: >. or >>...";
+// ===== ERROR SYSTEM =====
+function getError(code, e){
+  let msg = "Syntax error";
+  let col = 1;
 
-  if(code.includes("[") && !code.includes("]"))
-    return "Missing closing ']' for loop";
+  if(code.trim().startsWith(".")){
+    msg = "Must start with '>'";
+    col = code.indexOf('.')+1;
+  }
+  else if(code.includes("[") && !code.includes("]")){
+    msg = "Missing ]";
+    col = code.lastIndexOf("[")+1;
+  }
+  else if(code.includes("]") && !code.includes("[")){
+    msg = "Unexpected ]";
+    col = code.indexOf("]")+1;
+  }
+  else if(code.includes("->") && !code.includes("-=>")){
+    msg = "Variable not set";
+    col = code.indexOf("->")+1;
+  }
 
-  if(code.includes("]") && !code.includes("["))
-    return "Unexpected ']' → remove it or add '[' before";
-
-  if(msg.includes("-=>") && !code.includes("."))
-    return "Variable assignment needs value → example: >-=>...";
-
-  if(msg.includes("->") && !code.includes("-=>"))
-    return "Trying to print variable before assigning it";
-
-  if(msg.includes("Unexpected"))
-    return "Invalid syntax → check arrows (>) and dots (.) pattern";
-
-  return "Syntax error";
+  return {msg, col};
 }
+
+
+// ===== VALIDATE (LIVE) =====
+function validate(){
+  const model = editor.getModel();
+  const code = editor.getValue();
+
+  try{
+    const parser = new nearley.Parser(nearley.Grammar.fromCompiled(grammar));
+    parser.feed(code);
+
+    monaco.editor.setModelMarkers(model, "owner", []);
+  }
+  catch(e){
+    const err = getError(code,e);
+
+    monaco.editor.setModelMarkers(model, "owner", [{
+      startLineNumber:1,
+      startColumn:err.col,
+      endLineNumber:1,
+      endColumn:err.col+1,
+      message:err.msg,
+      severity:monaco.MarkerSeverity.Error
+    }]);
+  }
+}
+
 
 // ===== RUN =====
 function runCode(){
-  const model = editor.getModel();
+  const code = editor.getValue();
 
   try{
-    const input = editor.getValue();
     const parser = new nearley.Parser(nearley.Grammar.fromCompiled(grammar));
-    parser.feed(input);
+    parser.feed(code);
 
     const ast = parser.results[0];
 
@@ -139,22 +243,9 @@ function runCode(){
     execute(ast,vars,out);
 
     document.getElementById("output").textContent = out.value;
-    monaco.editor.setModelMarkers(model, "owner", []);
   }
   catch(e){
-    const code = editor.getValue();
-    const message = getSmartError(e, code);
-
-    document.getElementById("output").textContent = "Error: " + message;
-
-    monaco.editor.setModelMarkers(model, "owner", [{
-      startLineNumber: 1,
-      startColumn: 1,
-      endLineNumber: 1,
-      endColumn: 2,
-      message: message,
-      severity: monaco.MarkerSeverity.Error
-    }]);
+    document.getElementById("output").textContent = "Error";
   }
 }
 </script>
