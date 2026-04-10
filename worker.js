@@ -1,13 +1,6 @@
 let inputCounter = 0;
 const pendingInputs = new Map();
 
-const WAIT_COMMANDS = {
-  "#+>": 10000,
-  "#>": 1000,
-  "#->": 100,
-  "#>>": 2000
-};
-
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -16,7 +9,6 @@ self.onmessage = async function(e){
   try {
     const data = e.data;
 
-    // handle input responses
     if (data && data.type === 'input-response') {
       const resolver = pendingInputs.get(data.id);
       if (resolver) {
@@ -44,6 +36,37 @@ function requestInput(promptText) {
   return p;
 }
 
+// 🔥 NEW: dynamic wait parser
+function parseWait(code, startIdx) {
+  let idx = startIdx + 1; // skip '#'
+  let multiplier = 1;
+  let arrows = 0;
+
+  while (idx < code.length) {
+    const ch = code[idx];
+
+    if (ch === "+") {
+      multiplier *= 10;
+    } else if (ch === "-") {
+      multiplier *= 0.1;
+    } else if (ch === ">") {
+      arrows++;
+    } else {
+      break;
+    }
+
+    idx++;
+  }
+
+  if (arrows === 0) return null;
+
+  const seconds = arrows * multiplier;
+  return {
+    time: seconds * 1000,
+    length: idx - startIdx
+  };
+}
+
 // --- interpreter ---
 async function interpret(code) {
   const vars = new Map();
@@ -60,13 +83,13 @@ async function interpret(code) {
 
     while (idx < codeSlice.length) {
 
-      // 🔥 WAIT TOKENS (NEW FEATURE)
+      // 🔥 DYNAMIC WAIT SYSTEM
       if (codeSlice[idx] === "#") {
-        const token = codeSlice.slice(idx, idx + 3);
+        const wait = parseWait(codeSlice, idx);
 
-        if (WAIT_COMMANDS[token] !== undefined) {
-          await sleep(WAIT_COMMANDS[token]);
-          idx += token.length;
+        if (wait) {
+          await sleep(wait.time);
+          idx += wait.length;
           continue;
         }
       }
@@ -85,6 +108,7 @@ async function interpret(code) {
           idx++;
         }
 
+        // LOOP (fixed real-time execution)
         if (idx < codeSlice.length && codeSlice[idx] === "[") {
           idx++;
           const bodyStart = idx;
@@ -99,14 +123,13 @@ async function interpret(code) {
           const bodyEnd = idx - 1;
           const body = codeSlice.substring(bodyStart, bodyEnd);
 
-          const sub = await runBlock(body, baseOffset + bodyStart);
-          const subJoined = sub.join("");
-
           for (let j = 0; j < arrows; j++) {
-            parts.push(subJoined);
+            const sub = await runBlock(body, baseOffset + bodyStart);
+            for (const part of sub) parts.push(part);
           }
         }
 
+        // PRINT
         else if (idx < codeSlice.length && codeSlice[idx] === ".") {
           let dots = 0;
           while (idx < codeSlice.length && codeSlice[idx] === ".") {
@@ -126,6 +149,7 @@ async function interpret(code) {
           }
         }
 
+        // VAR PRINT
         else if (
           idx + 1 < codeSlice.length &&
           codeSlice[idx] === "-" &&
